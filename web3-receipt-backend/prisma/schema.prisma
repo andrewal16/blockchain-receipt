@@ -1,0 +1,215 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums
+enum Role {
+  auditor
+  cfo
+}
+
+enum ReceiptStatus {
+  pending
+  processing
+  verified
+  failed
+}
+
+enum ProofType {
+  between
+  less_than
+  greater_than
+  equals
+}
+
+enum ZKStatus {
+  valid
+  expired
+  revoked
+}
+
+// Models
+
+model User {
+  id                String    @id @default(uuid()) @db.Uuid
+  wallet_address    String    @unique
+  role              Role
+  organization_name String?
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
+
+  receipts          Receipt[]
+  zk_proofs         ZKProof[]
+
+  @@map("users")
+}
+
+model Receipt {
+  id                   String          @id // RCP-2025-xxxx (Manual ID from frontend/logic)
+  user_id              String          @db.Uuid
+  user                 User            @relation(fields: [user_id], references: [id])
+  
+  category_id          String          @db.Uuid
+  category             Category        @relation(fields: [category_id], references: [id])
+  
+  vendor_name          String
+  invoice_number       String?
+  receipt_date         DateTime        @db.Date
+  
+  // Financials (Using Decimal for precision)
+  subtotal             Decimal         @db.Decimal(18, 2)
+  tax_amount           Decimal         @db.Decimal(18, 2)
+  total_amount         Decimal         @db.Decimal(18, 2)
+  extracted_total      Decimal?        @db.Decimal(18, 2)
+  
+  notes                String?
+  status               ReceiptStatus   @default(pending)
+  
+  // AI Data
+  ai_confidence_score  Float
+  ai_confidence_reason String?
+  is_manually_verified Boolean         @default(false)
+  
+  created_at           DateTime        @default(now())
+  updated_at           DateTime        @updatedAt
+
+  // Relations
+  items               ReceiptItem[]
+  blockchain_record   BlockchainRecord?
+  ipfs_record         IPFSRecord?
+
+  @@map("receipts")
+}
+
+model ReceiptItem {
+  id          String   @id @default(uuid()) @db.Uuid
+  receipt_id  String
+  receipt     Receipt  @relation(fields: [receipt_id], references: [id])
+  
+  description String
+  quantity    Int
+  unit_price  Decimal  @db.Decimal(18, 2)
+  total       Decimal  @db.Decimal(18, 2)
+  sequence    Int
+
+  @@map("receipt_items")
+}
+
+model BlockchainRecord {
+  id           String   @id @default(uuid()) @db.Uuid
+  receipt_id   String   @unique
+  receipt      Receipt  @relation(fields: [receipt_id], references: [id])
+  
+  tx_hash      String
+  block_number BigInt
+  network      String
+  recorded_at  DateTime @default(now())
+
+  @@map("blockchain_records")
+}
+
+model IPFSRecord {
+  id          String   @id @default(uuid()) @db.Uuid
+  receipt_id  String   @unique
+  receipt     Receipt  @relation(fields: [receipt_id], references: [id])
+  
+  cid         String
+  file_hash   String?
+  file_size   BigInt?
+  file_type   String?
+  uploaded_at DateTime @default(now())
+
+  @@map("ipfs_records")
+}
+
+model Category {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique
+  description String?
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+
+  receipts    Receipt[]
+  zk_categories ZKProofCategory[]
+
+  @@map("categories")
+}
+
+model ZKProof {
+  id                 String    @id // ZKP-xxxx
+  user_id            String    @db.Uuid
+  user               User      @relation(fields: [user_id], references: [id])
+  
+  name               String
+  purpose            String?
+  date_range_start   DateTime  @db.Date
+  date_range_end     DateTime  @db.Date
+  
+  proof_type         ProofType
+  range_min          Decimal   @db.Decimal(18, 2)
+  range_max          Decimal   @db.Decimal(18, 2)
+  
+  // Security
+  actual_amount_encrypted Bytes? // Buffer/Blob
+  actual_amount_hash      String?
+  
+  proof_metadata     Json?     // JSONB
+  include_categories Boolean   @default(false)
+  status             ZKStatus  @default(valid)
+  is_public          Boolean   @default(true)
+  
+  proof_hash         String
+  verification_count Int       @default(0)
+  
+  last_verified_at   DateTime?
+  created_at         DateTime  @default(now())
+  expires_at         DateTime
+
+  categories         ZKProofCategory[]
+  verification_logs  ZKVerificationLog[]
+  blockchain_record  ZKProofBlockchain?
+
+  @@map("zk_proofs")
+}
+
+model ZKProofCategory {
+  id          String   @id @default(uuid()) @db.Uuid
+  zk_proof_id String
+  zk_proof    ZKProof  @relation(fields: [zk_proof_id], references: [id])
+  
+  category_id String   @db.Uuid
+  category    Category @relation(fields: [category_id], references: [id])
+
+  @@map("zk_proof_categories")
+}
+
+model ZKProofBlockchain {
+  id           String   @id @default(uuid()) @db.Uuid
+  zk_proof_id  String   @unique
+  zk_proof     ZKProof  @relation(fields: [zk_proof_id], references: [id])
+  
+  tx_hash      String
+  block_number BigInt
+  recorded_at  DateTime @default(now())
+
+  @@map("zk_proof_blockchain")
+}
+
+model ZKVerificationLog {
+  id                  String   @id @default(uuid()) @db.Uuid
+  zk_proof_id         String
+  zk_proof            ZKProof  @relation(fields: [zk_proof_id], references: [id])
+  
+  verifier_ip_hash    String
+  verifier_user_agent String?
+  verified_at         DateTime @default(now())
+
+  @@map("zk_verification_logs")
+}

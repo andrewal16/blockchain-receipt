@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useWeb3 } from '../context/Web3Context';
-import Navbar from '../components/common/Navbar';
-import Card from '../components/common/Card';
-import Button from '../components/common/Button';
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { useWeb3 } from "../context/Web3Context";
+import Navbar from "../components/common/Navbar";
+import Card from "../components/common/Card";
+import Button from "../components/common/Button";
 
 const WalletConnection = () => {
   const { connectWallet, isConnected, account, selectRole } = useWeb3();
@@ -19,9 +19,9 @@ const WalletConnection = () => {
 
   const handleConnectMetaMask = async () => {
     setIsConnecting(true);
-    const result = await connectWallet('metamask');
+    const result = await connectWallet("metamask");
     setIsConnecting(false);
-    
+
     if (result.success) {
       setShowRoleSelection(true);
     }
@@ -29,19 +29,25 @@ const WalletConnection = () => {
 
   const handleRoleSelect = (role) => {
     selectRole(role);
-    if (role === 'auditor') {
-      navigate('/upload');
+
+    // Route based on role
+    if (role === "finance") {
+      navigate("/agreements");
+    } else if (role === "cfo") {
+      navigate("/dashboard");
+    } else if (role === "vendor") {
+      navigate("/vendor/dashboard");
     } else {
-      navigate('/dashboard');
+      navigate("/");
     }
   };
 
   return (
-    <div className="min-h-screen bg-primary-900">
+    <div className="min-h-screen bg-[#0B0F19]">
       <Navbar />
 
       <div className="flex items-center justify-center min-h-screen px-4 py-20">
-        <Card className="max-w-md w-full">
+        <Card className="max-w-md w-full bg-slate-900/50 border-white/10 backdrop-blur-md">
           {!showRoleSelection ? (
             <>
               <h2 className="text-3xl font-bold text-white text-center mb-8">
@@ -52,37 +58,41 @@ const WalletConnection = () => {
                 <button
                   onClick={handleConnectMetaMask}
                   disabled={isConnecting}
-                  className="w-full flex items-center gap-4 p-4 bg-neutral-800 border border-neutral-700 rounded-lg hover:border-secondary-500 hover:-translate-y-1 transition-all duration-300"
+                  className="w-full flex items-center gap-4 p-4 bg-slate-800 border border-white/10 rounded-lg hover:border-cyan-500/50 hover:-translate-y-1 transition-all duration-300"
                 >
                   <span className="text-4xl">🦊</span>
                   <div className="flex-1 text-left">
                     <div className="font-semibold text-white">MetaMask</div>
-                    <div className="text-sm text-neutral-400">
+                    <div className="text-sm text-slate-400">
                       Connect with MetaMask wallet
                     </div>
                   </div>
-                  <span className="text-neutral-400">→</span>
+                  <span className="text-slate-400">→</span>
                 </button>
 
                 <button
                   disabled
-                  className="w-full flex items-center gap-4 p-4 bg-neutral-800 border border-neutral-700 rounded-lg opacity-50 cursor-not-allowed"
+                  className="w-full flex items-center gap-4 p-4 bg-slate-800/50 border border-white/10 rounded-lg opacity-50 cursor-not-allowed"
                 >
                   <span className="text-4xl">🔗</span>
                   <div className="flex-1 text-left">
-                    <div className="font-semibold text-white">WalletConnect</div>
-                    <div className="text-sm text-neutral-400">Coming soon</div>
+                    <div className="font-semibold text-white">
+                      WalletConnect
+                    </div>
+                    <div className="text-sm text-slate-400">Coming soon</div>
                   </div>
                 </button>
 
                 <button
                   disabled
-                  className="w-full flex items-center gap-4 p-4 bg-neutral-800 border border-neutral-700 rounded-lg opacity-50 cursor-not-allowed"
+                  className="w-full flex items-center gap-4 p-4 bg-slate-800/50 border border-white/10 rounded-lg opacity-50 cursor-not-allowed"
                 >
                   <span className="text-4xl">🔵</span>
                   <div className="flex-1 text-left">
-                    <div className="font-semibold text-white">Coinbase Wallet</div>
-                    <div className="text-sm text-neutral-400">Coming soon</div>
+                    <div className="font-semibold text-white">
+                      Coinbase Wallet
+                    </div>
+                    <div className="text-sm text-slate-400">Coming soon</div>
                   </div>
                 </button>
               </div>
@@ -94,7 +104,7 @@ const WalletConnection = () => {
                 <h2 className="text-2xl font-bold text-white mb-2">
                   Wallet Connected
                 </h2>
-                <p className="text-neutral-400 text-sm">
+                <p className="text-slate-400 text-sm">
                   {account?.slice(0, 6)}...{account?.slice(-4)}
                 </p>
               </div>
@@ -105,36 +115,62 @@ const WalletConnection = () => {
 
               <div className="space-y-4">
                 <button
-                  onClick={() => handleRoleSelect('auditor')}
-                  className="w-full p-6 bg-neutral-800 border border-neutral-700 rounded-lg hover:border-secondary-500 hover:-translate-y-1 transition-all duration-300 text-left"
+                  onClick={() => handleRoleSelect("finance")}
+                  className="w-full p-6 bg-slate-800 border border-white/10 rounded-lg hover:border-cyan-500/50 hover:-translate-y-1 transition-all duration-300 text-left group"
                 >
                   <div className="flex items-center gap-4">
                     <span className="text-4xl">📋</span>
                     <div className="flex-1">
-                      <div className="font-semibold text-white text-lg">
-                        Auditor
+                      <div className="font-semibold text-white text-lg group-hover:text-cyan-400 transition-colors">
+                        Finance Team
                       </div>
-                      <div className="text-sm text-neutral-400">
-                        Upload and verify receipts
+                      <div className="text-sm text-slate-400">
+                        Create agreements & submit invoices
                       </div>
                     </div>
-                    <span className="text-neutral-400">→</span>
+                    <span className="text-slate-400 group-hover:text-cyan-400 transition-colors">
+                      →
+                    </span>
                   </div>
                 </button>
 
                 <button
-                  onClick={() => handleRoleSelect('cfo')}
-                  className="w-full p-6 bg-neutral-800 border border-neutral-700 rounded-lg hover:border-secondary-500 hover:-translate-y-1 transition-all duration-300 text-left"
+                  onClick={() => handleRoleSelect("cfo")}
+                  className="w-full p-6 bg-slate-800 border border-white/10 rounded-lg hover:border-cyan-500/50 hover:-translate-y-1 transition-all duration-300 text-left group"
                 >
                   <div className="flex items-center gap-4">
-                    <span className="text-4xl">💼</span>
+                    <span className="text-4xl">👨‍💼</span>
                     <div className="flex-1">
-                      <div className="font-semibold text-white text-lg">CFO</div>
-                      <div className="text-sm text-neutral-400">
-                        View dashboard & generate reports
+                      <div className="font-semibold text-white text-lg group-hover:text-cyan-400 transition-colors">
+                        CFO
+                      </div>
+                      <div className="text-sm text-slate-400">
+                        View dashboard, approve & generate reports
                       </div>
                     </div>
-                    <span className="text-neutral-400">→</span>
+                    <span className="text-slate-400 group-hover:text-cyan-400 transition-colors">
+                      →
+                    </span>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => handleRoleSelect("vendor")}
+                  className="w-full p-6 bg-slate-800 border border-white/10 rounded-lg hover:border-cyan-500/50 hover:-translate-y-1 transition-all duration-300 text-left group"
+                >
+                  <div className="flex items-center gap-4">
+                    <span className="text-4xl">🏢</span>
+                    <div className="flex-1">
+                      <div className="font-semibold text-white text-lg group-hover:text-cyan-400 transition-colors">
+                        Vendor
+                      </div>
+                      <div className="text-sm text-slate-400">
+                        Review & approve purchase agreements
+                      </div>
+                    </div>
+                    <span className="text-slate-400 group-hover:text-cyan-400 transition-colors">
+                      →
+                    </span>
                   </div>
                 </button>
               </div>

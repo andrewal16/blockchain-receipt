@@ -9,10 +9,35 @@ import { formatCurrency, formatDate } from "../utils/helpers";
 
 const CFODashboard = () => {
   const navigate = useNavigate();
-  const dashboardRef = useRef(null); // Scope untuk GSAP
+  const dashboardRef = useRef(null);
   const [timeRange, setTimeRange] = useState("this-month");
 
-  // --- MOCK DATA ---
+  // Mock Data - Pending Approvals
+  const [pendingApprovals] = useState({
+    agreements: 2,
+    invoices: 2,
+    fraud: 2,
+  });
+
+  // Mock Data - Fraud Alerts (Recent)
+  const [recentFraud] = useState([
+    {
+      id: "FRAUD-001",
+      type: "Price Markup",
+      severity: "high",
+      timestamp: "2025-01-24 14:30",
+      amount: 2000000,
+    },
+    {
+      id: "FRAUD-002",
+      type: "Quantity Exceeded",
+      severity: "medium",
+      timestamp: "2025-01-23 16:45",
+      amount: 0,
+    },
+  ]);
+
+  // Dashboard Stats
   const dashboardStats = {
     totalReceipts: 156,
     totalAmount: 87450000,
@@ -35,6 +60,8 @@ const CFODashboard = () => {
       count: 45,
       percentage: 32.6,
       color: "bg-blue-500",
+      limit: 50000000,
+      todayUsed: 30000000,
     },
     {
       category: "Meals",
@@ -42,6 +69,8 @@ const CFODashboard = () => {
       count: 38,
       percentage: 14.1,
       color: "bg-emerald-500",
+      limit: 15000000,
+      todayUsed: 8000000,
     },
     {
       category: "Supplies",
@@ -49,6 +78,8 @@ const CFODashboard = () => {
       count: 28,
       percentage: 17.8,
       color: "bg-purple-500",
+      limit: 10000000,
+      todayUsed: 4000000,
     },
     {
       category: "Software",
@@ -56,6 +87,8 @@ const CFODashboard = () => {
       count: 22,
       percentage: 20.8,
       color: "bg-cyan-500",
+      limit: 25000000,
+      todayUsed: 12000000,
     },
     {
       category: "Marketing",
@@ -63,6 +96,8 @@ const CFODashboard = () => {
       count: 15,
       percentage: 11.3,
       color: "bg-orange-500",
+      limit: 75000000,
+      todayUsed: 20000000,
     },
   ];
 
@@ -100,27 +135,29 @@ const CFODashboard = () => {
       date: "2025-01-16",
       status: "pending",
     },
-    {
-      id: "RCP-00120",
-      auditor: "Auditor #1",
-      vendor: "Grab Corp",
-      amount: 125000,
-      date: "2025-01-16",
-      status: "verified",
-    },
   ];
 
-  // --- ANIMATION LOGIC (FIXED) ---
+  // GSAP Animations
   useEffect(() => {
     const ctx = gsap.context(() => {
-      // 1. Header Animation
       gsap.fromTo(
         ".dashboard-header",
         { y: -20, opacity: 0 },
         { y: 0, opacity: 1, duration: 0.8, ease: "power3.out" }
       );
 
-      // 2. Stats Cards (Staggered)
+      gsap.fromTo(
+        ".alert-banner",
+        { scale: 0.95, opacity: 0 },
+        {
+          scale: 1,
+          opacity: 1,
+          duration: 0.6,
+          ease: "back.out(1.5)",
+          delay: 0.2,
+        }
+      );
+
       gsap.fromTo(
         ".stat-card",
         { y: 30, opacity: 0 },
@@ -130,18 +167,10 @@ const CFODashboard = () => {
           duration: 0.6,
           stagger: 0.1,
           ease: "back.out(1.2)",
-          delay: 0.2,
+          delay: 0.3,
         }
       );
 
-      // 3. ZK Promo Banner (Scale Up)
-      gsap.fromTo(
-        ".zk-banner",
-        { scale: 0.95, opacity: 0 },
-        { scale: 1, opacity: 1, duration: 0.8, ease: "power4.out", delay: 0.4 }
-      );
-
-      // 4. Charts & Main Content
       gsap.fromTo(
         ".content-block",
         { y: 40, opacity: 0 },
@@ -151,21 +180,7 @@ const CFODashboard = () => {
           duration: 0.8,
           stagger: 0.15,
           ease: "power3.out",
-          delay: 0.6,
-        }
-      );
-
-      // 5. Table Rows
-      gsap.fromTo(
-        ".table-row",
-        { x: -20, opacity: 0 },
-        {
-          x: 0,
-          opacity: 1,
-          duration: 0.4,
-          stagger: 0.05,
-          ease: "power2.out",
-          delay: 1,
+          delay: 0.5,
         }
       );
     }, dashboardRef);
@@ -173,6 +188,10 @@ const CFODashboard = () => {
     return () => ctx.revert();
   }, []);
 
+  const totalPending =
+    pendingApprovals.agreements +
+    pendingApprovals.invoices +
+    pendingApprovals.fraud;
   const maxAmount = Math.max(...categoryData.map((c) => c.amount));
 
   return (
@@ -183,8 +202,8 @@ const CFODashboard = () => {
       <Navbar />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-28 pb-12">
-        {/* --- HEADER SECTION --- */}
-        <div className="dashboard-header flex flex-col md:flex-row justify-between items-end mb-10 gap-4 border-b border-white/5 pb-6">
+        {/* Header */}
+        <div className="dashboard-header flex flex-col md:flex-row justify-between items-end mb-6 gap-4 border-b border-white/5 pb-6">
           <div>
             <div className="flex items-center gap-3 mb-1">
               <h1 className="text-3xl font-bold text-white">
@@ -216,9 +235,98 @@ const CFODashboard = () => {
           </div>
         </div>
 
-        {/* --- KEY METRICS GRID --- */}
+        {/* CRITICAL: Pending Approvals Alert Banner */}
+        {totalPending > 0 && (
+          <div className="alert-banner mb-8 bg-gradient-to-r from-amber-900/20 to-orange-900/20 border border-amber-500/30 rounded-xl p-6 relative overflow-hidden">
+            {/* Glow Effect */}
+            <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl"></div>
+
+            <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-5">
+                <div className="w-14 h-14 rounded-xl bg-amber-500/20 flex items-center justify-center text-3xl animate-pulse">
+                  ⚠️
+                </div>
+                <div>
+                  <h3 className="text-amber-400 font-bold text-xl mb-1">
+                    {totalPending} Items Need Your Approval
+                  </h3>
+                  <div className="flex flex-wrap gap-3 text-sm">
+                    {pendingApprovals.agreements > 0 && (
+                      <span className="text-amber-200/80">
+                        📋 {pendingApprovals.agreements} Agreements
+                      </span>
+                    )}
+                    {pendingApprovals.invoices > 0 && (
+                      <span className="text-amber-200/80">
+                        💰 {pendingApprovals.invoices} Invoices Over Limit
+                      </span>
+                    )}
+                    {pendingApprovals.fraud > 0 && (
+                      <span className="text-red-400 font-bold">
+                        🚨 {pendingApprovals.fraud} Fraud Alerts
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <Button
+                variant="primary"
+                size="lg"
+                onClick={() => navigate("/approvals")}
+                className="bg-amber-500 hover:bg-amber-400 text-black font-bold shadow-lg shadow-amber-500/20"
+              >
+                Review Now →
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Fraud Alerts (If Any) */}
+        {recentFraud.length > 0 && (
+          <div className="alert-banner mb-8 bg-red-950/50 border-2 border-red-500/50 rounded-xl p-5 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-red-500/10 rounded-full blur-2xl animate-pulse"></div>
+
+            <div className="relative z-10">
+              <div className="flex items-center gap-3 mb-3">
+                <span className="text-3xl">🚨</span>
+                <h3 className="text-red-400 font-bold text-lg">
+                  Recent Fraud Detection Alerts
+                </h3>
+              </div>
+              <div className="space-y-2">
+                {recentFraud.map((fraud) => (
+                  <div
+                    key={fraud.id}
+                    className="bg-red-900/20 border border-red-500/20 rounded-lg p-3 flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Badge variant="error" size="sm">
+                        {fraud.type}
+                      </Badge>
+                      <span className="text-sm text-slate-300">
+                        {fraud.timestamp}
+                      </span>
+                      {fraud.amount > 0 && (
+                        <span className="text-sm text-red-400 font-mono">
+                          +{formatCurrency(fraud.amount)}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => navigate("/approvals?tab=fraud")}
+                      className="text-xs text-red-400 hover:text-red-300 font-bold"
+                    >
+                      Review →
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {/* Total Spend */}
           <div className="stat-card bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-white/5 p-6 rounded-2xl backdrop-blur-sm hover:border-white/10 transition-colors group">
             <div className="flex justify-between items-start mb-4">
               <div className="p-3 rounded-xl bg-blue-500/10 text-blue-400 group-hover:scale-110 transition-transform">
@@ -236,7 +344,6 @@ const CFODashboard = () => {
             </div>
           </div>
 
-          {/* Receipt Volume */}
           <div className="stat-card bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-white/5 p-6 rounded-2xl backdrop-blur-sm hover:border-white/10 transition-colors group">
             <div className="flex justify-between items-start mb-4">
               <div className="p-3 rounded-xl bg-purple-500/10 text-purple-400 group-hover:scale-110 transition-transform">
@@ -254,7 +361,6 @@ const CFODashboard = () => {
             </div>
           </div>
 
-          {/* Compliance Score */}
           <div className="stat-card bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-white/5 p-6 rounded-2xl backdrop-blur-sm hover:border-white/10 transition-colors group">
             <div className="flex justify-between items-start mb-4">
               <div className="p-3 rounded-xl bg-emerald-500/10 text-emerald-400 group-hover:scale-110 transition-transform">
@@ -270,7 +376,6 @@ const CFODashboard = () => {
             </div>
           </div>
 
-          {/* Pending Actions */}
           <div className="stat-card bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-white/5 p-6 rounded-2xl backdrop-blur-sm hover:border-white/10 transition-colors group">
             <div className="flex justify-between items-start mb-4">
               <div className="p-3 rounded-xl bg-amber-500/10 text-amber-400 group-hover:scale-110 transition-transform">
@@ -288,9 +393,8 @@ const CFODashboard = () => {
           </div>
         </div>
 
-        {/* --- ZK PROMO BANNER (HERO FEATURE) --- */}
-        <div className="zk-banner mb-8 relative overflow-hidden rounded-3xl border border-cyan-500/30 bg-gradient-to-r from-slate-900 to-slate-800 shadow-[0_0_40px_-15px_rgba(6,182,212,0.2)]">
-          {/* Abstract BG Shapes */}
+        {/* ZK Promo Banner */}
+        <div className="content-block mb-8 relative overflow-hidden rounded-3xl border border-cyan-500/30 bg-gradient-to-r from-slate-900 to-slate-800 shadow-[0_0_40px_-15px_rgba(6,182,212,0.2)]">
           <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3"></div>
 
           <div className="relative z-10 p-8 flex flex-col md:flex-row items-center justify-between gap-6">
@@ -303,12 +407,9 @@ const CFODashboard = () => {
                   Zero-Knowledge Audits Active
                 </h3>
                 <p className="text-slate-400 max-w-lg text-sm leading-relaxed">
-                  Your financial data is cryptographically proven without
-                  revealing sensitive details. You have{" "}
-                  <strong className="text-cyan-400">
-                    {zkStats.activeProofs} active proofs
-                  </strong>{" "}
-                  running.
+                  {zkStats.activeProofs} proofs running •{" "}
+                  {zkStats.totalVerifications} external verifications • Privacy
+                  preserved
                 </p>
               </div>
             </div>
@@ -331,52 +432,90 @@ const CFODashboard = () => {
           </div>
         </div>
 
-        {/* --- CHARTS SECTION --- */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          {/* 1. Spending Distribution (Custom Bar Chart) */}
-          <div className="content-block lg:col-span-2 bg-slate-900/50 border border-white/5 rounded-2xl p-6 backdrop-blur-sm">
-            <div className="flex justify-between items-center mb-6">
+        {/* Daily Spending Limits Overview */}
+        <div className="content-block mb-8">
+          <div className="flex justify-between items-center mb-6">
+            <div>
               <h3 className="font-bold text-white text-lg">
-                Spending Distribution
+                Today's Spending by Category
               </h3>
-              <button className="text-xs text-slate-400 hover:text-white transition-colors">
-                View Details
-              </button>
+              <p className="text-slate-500 text-sm">
+                Real-time daily limit tracking
+              </p>
             </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate("/settings/daily-limits")}
+            >
+              Manage Limits →
+            </Button>
+          </div>
 
-            <div className="space-y-4">
-              {categoryData.map((cat, idx) => (
-                <div key={idx} className="group">
-                  <div className="flex justify-between text-sm mb-1.5">
-                    <div className="flex items-center gap-2">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {categoryData.map((cat, idx) => {
+              const usagePercent = (cat.todayUsed / cat.limit) * 100;
+              const isNearLimit = usagePercent > 80;
+
+              return (
+                <div
+                  key={idx}
+                  className="bg-slate-900/50 border border-white/5 rounded-xl p-5 hover:border-white/10 transition-all"
+                >
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="flex items-center gap-3">
                       <div
-                        className={`w-2 h-2 rounded-full ${cat.color}`}
+                        className={`w-3 h-3 rounded-full ${cat.color}`}
                       ></div>
-                      <span className="text-slate-300 font-medium">
+                      <span className="text-white font-bold">
                         {cat.category}
                       </span>
                     </div>
-                    <div className="flex gap-4">
-                      <span className="text-slate-500 text-xs">
-                        {cat.count} txs
-                      </span>
-                      <span className="text-white font-mono">
-                        {formatCurrency(cat.amount)}
+                    {isNearLimit && (
+                      <Badge variant="warning" size="sm">
+                        Near Limit
+                      </Badge>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-400">Today's Usage:</span>
+                      <span className="text-white font-mono font-bold">
+                        {formatCurrency(cat.todayUsed)}
                       </span>
                     </div>
-                  </div>
-                  <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
-                    <div
-                      className={`h-full rounded-full ${cat.color} opacity-80 group-hover:opacity-100 transition-all duration-500`}
-                      style={{ width: `${(cat.amount / maxAmount) * 100}%` }}
-                    ></div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-400">Daily Limit:</span>
+                      <span className="text-slate-500 font-mono">
+                        {formatCurrency(cat.limit)}
+                      </span>
+                    </div>
+
+                    <div className="pt-2">
+                      <div className="flex justify-between text-xs text-slate-500 mb-1">
+                        <span>Progress</span>
+                        <span>{usagePercent.toFixed(0)}%</span>
+                      </div>
+                      <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            isNearLimit ? "bg-amber-500" : cat.color
+                          }`}
+                          style={{ width: `${Math.min(usagePercent, 100)}%` }}
+                        ></div>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </div>
+        </div>
 
-          {/* 2. Monthly Trend (Simple CSS Columns) */}
+        {/* Charts & Recent Transactions */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          {/* Monthly Trend */}
           <div className="content-block bg-slate-900/50 border border-white/5 rounded-2xl p-6 backdrop-blur-sm flex flex-col">
             <div className="mb-6">
               <h3 className="font-bold text-white text-lg">6-Month Trend</h3>
@@ -392,11 +531,9 @@ const CFODashboard = () => {
                     className="flex-1 flex flex-col items-center group cursor-pointer"
                   >
                     <div className="relative w-full">
-                      {/* Tooltip */}
                       <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap border border-white/10 pointer-events-none z-10">
                         {formatCurrency(m.amount)}
                       </div>
-                      {/* Bar */}
                       <div
                         className="w-full bg-slate-700 hover:bg-cyan-500 rounded-t-sm transition-all duration-300"
                         style={{ height: `${height}%` }}
@@ -410,72 +547,59 @@ const CFODashboard = () => {
               })}
             </div>
           </div>
-        </div>
 
-        {/* --- RECENT TRANSACTIONS (Table) --- */}
-        <div className="content-block bg-slate-900/50 border border-white/5 rounded-2xl overflow-hidden backdrop-blur-sm">
-          <div className="p-6 border-b border-white/5 flex justify-between items-center">
-            <h3 className="font-bold text-white text-lg">
-              Recent Transactions
-            </h3>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate("/auditor/submissions")}
-            >
-              View Full Ledger →
-            </Button>
-          </div>
+          {/* Quick Actions */}
+          <div className="content-block lg:col-span-2 bg-slate-900/50 border border-white/5 rounded-2xl p-6">
+            <h3 className="font-bold text-white text-lg mb-4">Quick Actions</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={() => navigate("/approvals")}
+                className="bg-slate-800 hover:bg-slate-700 border border-white/10 rounded-xl p-4 text-left transition-all group"
+              >
+                <div className="text-2xl mb-2">📋</div>
+                <div className="font-bold text-white group-hover:text-cyan-400 transition-colors">
+                  Review Approvals
+                </div>
+                <div className="text-xs text-slate-500">
+                  {totalPending} pending items
+                </div>
+              </button>
 
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-slate-800/50 text-slate-400 text-xs uppercase font-semibold tracking-wider">
-                <tr>
-                  <th className="px-6 py-4 text-left">ID</th>
-                  <th className="px-6 py-4 text-left">Vendor</th>
-                  <th className="px-6 py-4 text-left">Amount</th>
-                  <th className="px-6 py-4 text-left">Auditor</th>
-                  <th className="px-6 py-4 text-left">Date</th>
-                  <th className="px-6 py-4 text-left">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {recentReceipts.map((row) => (
-                  <tr
-                    key={row.id}
-                    className="table-row group hover:bg-white/5 transition-colors cursor-pointer"
-                    onClick={() => navigate(`/receipt/${row.id}`)}
-                  >
-                    <td className="px-6 py-4 font-mono text-sm text-cyan-400 group-hover:underline">
-                      {row.id}
-                    </td>
-                    <td className="px-6 py-4 text-white font-medium">
-                      {row.vendor}
-                    </td>
-                    <td className="px-6 py-4 text-white">
-                      {formatCurrency(row.amount)}
-                    </td>
-                    <td className="px-6 py-4 text-slate-400 text-sm">
-                      {row.auditor}
-                    </td>
-                    <td className="px-6 py-4 text-slate-400 text-sm">
-                      {formatDate(row.date)}
-                    </td>
-                    <td className="px-6 py-4">
-                      <Badge
-                        variant={
-                          row.status === "verified" ? "success" : "warning"
-                        }
-                        size="sm"
-                        dot
-                      >
-                        {row.status === "verified" ? "Verified" : "Pending"}
-                      </Badge>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+              <button
+                onClick={() => navigate("/agreements")}
+                className="bg-slate-800 hover:bg-slate-700 border border-white/10 rounded-xl p-4 text-left transition-all group"
+              >
+                <div className="text-2xl mb-2">📄</div>
+                <div className="font-bold text-white group-hover:text-cyan-400 transition-colors">
+                  Agreements
+                </div>
+                <div className="text-xs text-slate-500">Manage contracts</div>
+              </button>
+
+              <button
+                onClick={() => navigate("/settings/daily-limits")}
+                className="bg-slate-800 hover:bg-slate-700 border border-white/10 rounded-xl p-4 text-left transition-all group"
+              >
+                <div className="text-2xl mb-2">⚙️</div>
+                <div className="font-bold text-white group-hover:text-cyan-400 transition-colors">
+                  Daily Limits
+                </div>
+                <div className="text-xs text-slate-500">
+                  Configure spending caps
+                </div>
+              </button>
+
+              <button
+                onClick={() => navigate("/reports")}
+                className="bg-slate-800 hover:bg-slate-700 border border-white/10 rounded-xl p-4 text-left transition-all group"
+              >
+                <div className="text-2xl mb-2">📊</div>
+                <div className="font-bold text-white group-hover:text-cyan-400 transition-colors">
+                  Generate Report
+                </div>
+                <div className="text-xs text-slate-500">Export & analyze</div>
+              </button>
+            </div>
           </div>
         </div>
       </div>
