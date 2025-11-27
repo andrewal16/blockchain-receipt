@@ -35,18 +35,21 @@ const AgreementCreate = () => {
   const [formData, setFormData] = useState({
     vendor: "",
     category: "",
-    itemName: "",
-    specifications: "",
-    pricePerUnit: 0,
-    totalQuantity: 1,
+    items: [
+      {
+        id: 1,
+        itemName: "",
+        specifications: "",
+        pricePerUnit: 0,
+        quantity: 1,
+      },
+    ],
     contractPeriod: {
       start: new Date().toISOString().split("T")[0],
       end: "",
     },
     paymentTerms: "full", // 'full' or 'installment'
-    installments: [
-      { id: 1, milestone: "", quantity: 0, amount: 0 },
-    ],
+    installments: [{ id: 1, milestone: "", quantity: 0, amount: 0 }],
     draftContract: null,
   });
 
@@ -75,7 +78,13 @@ const AgreementCreate = () => {
       gsap.fromTo(
         ".step-indicator",
         { scale: 0, opacity: 0 },
-        { scale: 1, opacity: 1, duration: 0.5, stagger: 0.1, ease: "back.out(2)" }
+        {
+          scale: 1,
+          opacity: 1,
+          duration: 0.5,
+          stagger: 0.1,
+          ease: "back.out(2)",
+        }
       );
 
       gsap.fromTo(
@@ -88,6 +97,48 @@ const AgreementCreate = () => {
     return () => ctx.revert();
   }, [step]);
 
+  // ===== ITEM MANAGEMENT =====
+  const handleAddItem = () => {
+    setFormData((prev) => ({
+      ...prev,
+      items: [
+        ...prev.items,
+        {
+          id: Date.now(),
+          itemName: "",
+          specifications: "",
+          pricePerUnit: 0,
+          quantity: 1,
+        },
+      ],
+    }));
+  };
+
+  const handleRemoveItem = (id) => {
+    if (formData.items.length === 1) return;
+    setFormData((prev) => ({
+      ...prev,
+      items: prev.items.filter((item) => item.id !== id),
+    }));
+  };
+
+  const handleItemChange = (id, field, value) => {
+    setFormData((prev) => ({
+      ...prev,
+      items: prev.items.map((item) => {
+        if (item.id === id) {
+          let cleanValue = value;
+          if (field === "pricePerUnit" || field === "quantity") {
+            cleanValue = parseNumber(value);
+          }
+          return { ...item, [field]: cleanValue };
+        }
+        return item;
+      }),
+    }));
+  };
+
+  // ===== INSTALLMENT MANAGEMENT =====
   const handleAddInstallment = () => {
     setFormData((prev) => ({
       ...prev,
@@ -116,13 +167,22 @@ const AgreementCreate = () => {
       ...prev,
       installments: prev.installments.map((inst) => {
         if (inst.id === id) {
-          const updated = { ...inst, [field]: field === 'quantity' ? parseNumber(value) : value };
-          
-          // Auto-calculate amount
-          if (field === 'quantity') {
-            updated.amount = updated.quantity * formData.pricePerUnit;
+          const updated = {
+            ...inst,
+            [field]: field === "quantity" ? parseNumber(value) : value,
+          };
+
+          // Auto-calculate amount based on total agreement amount
+          if (field === "quantity") {
+            const totalAmount = calculateTotalAmount();
+            const totalQty = formData.items.reduce(
+              (sum, item) => sum + item.quantity,
+              0
+            );
+            updated.amount =
+              totalQty > 0 ? (updated.quantity / totalQty) * totalAmount : 0;
           }
-          
+
           return updated;
         }
         return inst;
@@ -130,8 +190,23 @@ const AgreementCreate = () => {
     }));
   };
 
-  const totalAmount = formData.pricePerUnit * formData.totalQuantity;
-  const installmentTotal = formData.installments.reduce((acc, i) => acc + i.amount, 0);
+  // ===== CALCULATIONS =====
+  const calculateTotalAmount = () => {
+    return formData.items.reduce((sum, item) => {
+      return sum + item.pricePerUnit * item.quantity;
+    }, 0);
+  };
+
+  const calculateTotalQuantity = () => {
+    return formData.items.reduce((sum, item) => sum + item.quantity, 0);
+  };
+
+  const totalAmount = calculateTotalAmount();
+  const totalQuantity = calculateTotalQuantity();
+  const installmentTotal = formData.installments.reduce(
+    (acc, i) => acc + i.amount,
+    0
+  );
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
@@ -140,8 +215,13 @@ const AgreementCreate = () => {
     await new Promise((resolve) => setTimeout(resolve, 2500));
 
     const agreement = {
-      id: `AGR-2025-${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`,
+      id: `AGR-2025-${String(Math.floor(Math.random() * 1000)).padStart(
+        3,
+        "0"
+      )}`,
       ...formData,
+      totalAmount,
+      totalQuantity,
       status: "Waiting Vendor Approval",
       createdAt: new Date().toISOString(),
       createdBy: "Finance Team",
@@ -173,6 +253,32 @@ const AgreementCreate = () => {
     </div>
   );
 
+  // Validation
+  const isFormValid = () => {
+    if (
+      !formData.vendor ||
+      !formData.category ||
+      !formData.contractPeriod.end
+    ) {
+      return false;
+    }
+
+    const hasValidItems = formData.items.every(
+      (item) => item.itemName && item.pricePerUnit > 0 && item.quantity > 0
+    );
+
+    if (!hasValidItems) return false;
+
+    if (
+      formData.paymentTerms === "installment" &&
+      Math.abs(installmentTotal - totalAmount) > 1
+    ) {
+      return false;
+    }
+
+    return true;
+  };
+
   return (
     <div
       className="min-h-screen bg-[#0B0F19] text-slate-200 font-sans selection:bg-cyan-500/30"
@@ -183,15 +289,18 @@ const AgreementCreate = () => {
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-32 pb-24">
         {/* Header */}
         <div className="text-center mb-12">
-          <Badge variant="default" className="mb-4 border-slate-700 text-slate-400">
+          <Badge
+            variant="default"
+            className="mb-4 border-slate-700 text-slate-400"
+          >
             Finance Team Portal
           </Badge>
           <h1 className="text-4xl font-bold text-white mb-3">
             Create Purchase Agreement
           </h1>
           <p className="text-slate-400 max-w-2xl mx-auto">
-            Initiate a new purchase agreement with vendor. Agreement will be sent
-            for vendor approval, then CFO final approval.
+            Initiate a new purchase agreement with vendor. Agreement will be
+            sent for vendor approval, then CFO final approval.
           </p>
         </div>
 
@@ -266,100 +375,159 @@ const AgreementCreate = () => {
               </div>
             </Card>
 
-            {/* Item Details */}
+            {/* Items Details */}
             <Card className="form-section p-6">
-              <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-                <span className="w-1 h-5 bg-purple-500 rounded-full"></span>
-                Item Details
-              </h3>
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <span className="w-1 h-5 bg-purple-500 rounded-full"></span>
+                  Items Details
+                </h3>
+                <button
+                  onClick={handleAddItem}
+                  className="text-sm bg-purple-500 hover:bg-purple-400 text-white font-bold px-4 py-2 rounded-lg transition-all"
+                >
+                  + Add Item
+                </button>
+              </div>
 
               <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">
-                    Item Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.itemName}
-                    onChange={(e) =>
-                      setFormData({ ...formData, itemName: e.target.value })
-                    }
-                    placeholder="e.g., Laptop Dell Latitude 5420"
-                    className="w-full bg-slate-900/50 border border-white/10 rounded-lg px-4 py-3 text-white focus:border-cyan-500/50 outline-none transition-all placeholder-slate-600"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">
-                    Specifications
-                  </label>
-                  <textarea
-                    value={formData.specifications}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        specifications: e.target.value,
-                      })
-                    }
-                    placeholder="e.g., Intel i5, 8GB RAM, 256GB SSD"
-                    rows="3"
-                    className="w-full bg-slate-900/50 border border-white/10 rounded-lg px-4 py-3 text-white focus:border-cyan-500/50 outline-none transition-all placeholder-slate-600"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">
-                      Price per Unit (IDR) *
-                    </label>
-                    <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500">
-                        Rp
+                {formData.items.map((item, idx) => (
+                  <div
+                    key={item.id}
+                    className="bg-slate-900/30 border border-white/5 rounded-xl p-5 group hover:border-white/10 transition-all"
+                  >
+                    <div className="flex items-center justify-between mb-4">
+                      <span className="text-sm font-bold text-white">
+                        Item #{idx + 1}
                       </span>
-                      <input
-                        type="text"
-                        value={formatThousand(formData.pricePerUnit)}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            pricePerUnit: parseNumber(e.target.value),
-                          })
-                        }
-                        className="w-full bg-slate-900/50 border border-white/10 rounded-lg pl-10 pr-4 py-3 text-white text-right focus:border-cyan-500/50 outline-none transition-all font-mono"
-                        required
-                      />
+                      {formData.items.length > 1 && (
+                        <button
+                          onClick={() => handleRemoveItem(item.id)}
+                          className="text-red-400 hover:text-red-300 text-sm opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">
+                          Item Name *
+                        </label>
+                        <input
+                          type="text"
+                          value={item.itemName}
+                          onChange={(e) =>
+                            handleItemChange(
+                              item.id,
+                              "itemName",
+                              e.target.value
+                            )
+                          }
+                          placeholder="e.g., Laptop Dell Latitude 5420"
+                          className="w-full bg-slate-950 border border-white/10 rounded-lg px-4 py-3 text-white focus:border-purple-500/50 outline-none transition-all placeholder-slate-600"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">
+                          Specifications
+                        </label>
+                        <textarea
+                          value={item.specifications}
+                          onChange={(e) =>
+                            handleItemChange(
+                              item.id,
+                              "specifications",
+                              e.target.value
+                            )
+                          }
+                          placeholder="e.g., Intel i5, 8GB RAM, 256GB SSD"
+                          rows="2"
+                          className="w-full bg-slate-950 border border-white/10 rounded-lg px-4 py-3 text-white focus:border-purple-500/50 outline-none transition-all placeholder-slate-600"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">
+                            Price per Unit (IDR) *
+                          </label>
+                          <div className="relative">
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-xs">
+                              Rp
+                            </span>
+                            <input
+                              type="text"
+                              value={formatThousand(item.pricePerUnit)}
+                              onChange={(e) =>
+                                handleItemChange(
+                                  item.id,
+                                  "pricePerUnit",
+                                  e.target.value
+                                )
+                              }
+                              className="w-full bg-slate-950 border border-white/10 rounded-lg pl-10 pr-4 py-3 text-white text-right focus:border-purple-500/50 outline-none transition-all font-mono"
+                              required
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">
+                            Quantity *
+                          </label>
+                          <input
+                            type="text"
+                            value={formatThousand(item.quantity)}
+                            onChange={(e) =>
+                              handleItemChange(
+                                item.id,
+                                "quantity",
+                                e.target.value
+                              )
+                            }
+                            className="w-full bg-slate-950 border border-white/10 rounded-lg px-4 py-3 text-white text-center focus:border-purple-500/50 outline-none transition-all font-mono"
+                            required
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">
+                            Subtotal
+                          </label>
+                          <div className="w-full bg-slate-800/50 border border-white/10 rounded-lg px-4 py-3 text-purple-400 text-right font-mono font-bold">
+                            {formatCurrency(item.pricePerUnit * item.quantity)}
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
+                ))}
+              </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">
-                      Total Quantity *
-                    </label>
-                    <input
-                      type="text"
-                      value={formatThousand(formData.totalQuantity)}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          totalQuantity: parseNumber(e.target.value),
-                        })
-                      }
-                      className="w-full bg-slate-900/50 border border-white/10 rounded-lg px-4 py-3 text-white text-center focus:border-cyan-500/50 outline-none transition-all font-mono"
-                      required
-                    />
-                  </div>
+              <div className="mt-6 bg-gradient-to-r from-purple-900/20 to-cyan-900/20 border border-purple-500/20 rounded-lg p-4">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm text-slate-400">Total Items</span>
+                  <span className="text-lg font-bold text-white">
+                    {formData.items.length} item(s)
+                  </span>
                 </div>
-
-                <div className="bg-cyan-900/10 border border-cyan-500/20 rounded-lg p-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-cyan-400 font-medium">
-                      Total Agreement Value
-                    </span>
-                    <span className="text-2xl font-bold text-cyan-400">
-                      {formatCurrency(totalAmount)}
-                    </span>
-                  </div>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm text-slate-400">Total Quantity</span>
+                  <span className="text-lg font-bold text-white font-mono">
+                    {totalQuantity} units
+                  </span>
+                </div>
+                <div className="flex justify-between items-center pt-3 border-t border-white/10">
+                  <span className="text-sm font-bold text-purple-400">
+                    Total Agreement Value
+                  </span>
+                  <span className="text-2xl font-bold text-purple-400">
+                    {formatCurrency(totalAmount)}
+                  </span>
                 </div>
               </div>
             </Card>
@@ -529,7 +697,7 @@ const AgreementCreate = () => {
 
                           <div>
                             <label className="block text-xs text-slate-500 mb-1">
-                              Quantity
+                              Quantity (units)
                             </label>
                             <input
                               type="text"
@@ -564,10 +732,11 @@ const AgreementCreate = () => {
                       + Add Milestone
                     </button>
 
-                    {installmentTotal !== totalAmount && (
+                    {Math.abs(installmentTotal - totalAmount) > 1 && (
                       <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-sm text-amber-400">
-                        ⚠️ Installment total ({formatCurrency(installmentTotal)})
-                        doesn't match agreement total ({formatCurrency(totalAmount)})
+                        ⚠️ Installment total ({formatCurrency(installmentTotal)}
+                        ) doesn't match agreement total (
+                        {formatCurrency(totalAmount)})
                       </div>
                     )}
                   </div>
@@ -588,16 +757,7 @@ const AgreementCreate = () => {
                 variant="primary"
                 className="flex-[2]"
                 onClick={() => setStep(2)}
-                disabled={
-                  !formData.vendor ||
-                  !formData.category ||
-                  !formData.itemName ||
-                  !formData.pricePerUnit ||
-                  !formData.totalQuantity ||
-                  !formData.contractPeriod.end ||
-                  (formData.paymentTerms === "installment" &&
-                    installmentTotal !== totalAmount)
-                }
+                disabled={!isFormValid()}
               >
                 Continue to Review →
               </Button>
@@ -619,7 +779,9 @@ const AgreementCreate = () => {
                     <div className="text-xs text-slate-500 uppercase font-bold mb-1">
                       Vendor
                     </div>
-                    <div className="text-white font-medium">{formData.vendor}</div>
+                    <div className="text-white font-medium">
+                      {formData.vendor}
+                    </div>
                   </div>
 
                   <div>
@@ -628,42 +790,6 @@ const AgreementCreate = () => {
                     </div>
                     <div className="text-white font-medium">
                       {formData.category}
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="text-xs text-slate-500 uppercase font-bold mb-1">
-                      Item Name
-                    </div>
-                    <div className="text-white font-medium">
-                      {formData.itemName}
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="text-xs text-slate-500 uppercase font-bold mb-1">
-                      Specifications
-                    </div>
-                    <div className="text-white font-medium">
-                      {formData.specifications || "-"}
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="text-xs text-slate-500 uppercase font-bold mb-1">
-                      Price per Unit
-                    </div>
-                    <div className="text-white font-medium font-mono">
-                      {formatCurrency(formData.pricePerUnit)}
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="text-xs text-slate-500 uppercase font-bold mb-1">
-                      Total Quantity
-                    </div>
-                    <div className="text-white font-medium font-mono">
-                      {formData.totalQuantity} units
                     </div>
                   </div>
 
@@ -689,6 +815,57 @@ const AgreementCreate = () => {
                   </div>
                 </div>
 
+                {/* Items List */}
+                <div className="border-t border-white/10 pt-6">
+                  <div className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+                    <span className="w-1 h-4 bg-purple-500 rounded-full"></span>
+                    Items ({formData.items.length})
+                  </div>
+                  <div className="space-y-3">
+                    {formData.items.map((item, idx) => (
+                      <div
+                        key={item.id}
+                        className="bg-slate-800/30 border border-white/5 rounded-lg p-4"
+                      >
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="flex-1">
+                            <div className="text-white font-bold mb-1">
+                              {idx + 1}. {item.itemName}
+                            </div>
+                            {item.specifications && (
+                              <div className="text-xs text-slate-400">
+                                {item.specifications}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-3 text-sm mt-3 pt-3 border-t border-white/10">
+                          <div>
+                            <span className="text-slate-500">Price/Unit: </span>
+                            <span className="text-white font-mono font-bold">
+                              {formatCurrency(item.pricePerUnit)}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-slate-500">Qty: </span>
+                            <span className="text-white font-mono font-bold">
+                              {item.quantity}
+                            </span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-slate-500">Total: </span>
+                            <span className="text-purple-400 font-mono font-bold">
+                              {formatCurrency(
+                                item.pricePerUnit * item.quantity
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 {formData.paymentTerms === "installment" && (
                   <div className="border-t border-white/10 pt-4">
                     <div className="text-sm font-bold text-white mb-3">
@@ -701,8 +878,8 @@ const AgreementCreate = () => {
                           className="flex justify-between items-center bg-slate-800/30 px-4 py-2 rounded"
                         >
                           <span className="text-slate-400 text-sm">
-                            {inst.milestone || `Milestone ${idx + 1}`} - {inst.quantity}{" "}
-                            units
+                            {inst.milestone || `Milestone ${idx + 1}`} -{" "}
+                            {inst.quantity} units
                           </span>
                           <span className="text-white font-mono font-bold">
                             {formatCurrency(inst.amount)}
@@ -714,13 +891,33 @@ const AgreementCreate = () => {
                 )}
 
                 <div className="bg-gradient-to-r from-cyan-900/20 to-blue-900/20 border border-cyan-500/30 rounded-lg p-6">
-                  <div className="flex justify-between items-center">
-                    <span className="text-lg font-bold text-white">
-                      Total Agreement Value
-                    </span>
-                    <span className="text-3xl font-bold text-cyan-400">
-                      {formatCurrency(totalAmount)}
-                    </span>
+                  <div className="grid grid-cols-2 gap-4 mb-3">
+                    <div className="text-center">
+                      <div className="text-xs text-slate-400 mb-1">
+                        Total Items
+                      </div>
+                      <div className="text-xl font-bold text-white">
+                        {formData.items.length}
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-xs text-slate-400 mb-1">
+                        Total Quantity
+                      </div>
+                      <div className="text-xl font-bold text-white">
+                        {totalQuantity} units
+                      </div>
+                    </div>
+                  </div>
+                  <div className="border-t border-cyan-500/20 pt-4">
+                    <div className="flex justify-between items-center">
+                      <span className="text-lg font-bold text-white">
+                        Total Agreement Value
+                      </span>
+                      <span className="text-3xl font-bold text-cyan-400">
+                        {formatCurrency(totalAmount)}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -799,7 +996,8 @@ const AgreementCreate = () => {
                   <div>
                     <div className="text-white font-medium">Vendor Review</div>
                     <div className="text-slate-400 text-xs">
-                      Vendor will be notified to review and approve this agreement
+                      Vendor will be notified to review and approve this
+                      agreement
                     </div>
                   </div>
                 </div>
@@ -849,10 +1047,15 @@ const AgreementCreate = () => {
                   setFormData({
                     vendor: "",
                     category: "",
-                    itemName: "",
-                    specifications: "",
-                    pricePerUnit: 0,
-                    totalQuantity: 1,
+                    items: [
+                      {
+                        id: 1,
+                        itemName: "",
+                        specifications: "",
+                        pricePerUnit: 0,
+                        quantity: 1,
+                      },
+                    ],
                     contractPeriod: {
                       start: new Date().toISOString().split("T")[0],
                       end: "",
