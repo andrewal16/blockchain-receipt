@@ -1,4 +1,10 @@
-import { createContext, useContext, useState, useEffect } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+} from "react";
 import { ethers } from "ethers";
 import { BLOCKCHAIN_CONFIG, STORAGE_KEYS } from "../utils/constants";
 
@@ -20,12 +26,39 @@ export const Web3Provider = ({ children }) => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState(null);
   const [userRole, setUserRole] = useState(null);
+  const [hasCheckedConnection, setHasCheckedConnection] = useState(false);
 
-  // Check if wallet is already connected on mount
+  // ✅ NEW: Check if user explicitly disconnected
+  const checkExplicitDisconnect = () => {
+    return localStorage.getItem(STORAGE_KEYS.EXPLICIT_DISCONNECT) === "true";
+  };
+
+  // ✅ NEW: Set explicit disconnect flag
+  const setExplicitDisconnect = (value) => {
+    if (value) {
+      localStorage.setItem(STORAGE_KEYS.EXPLICIT_DISCONNECT, "true");
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.EXPLICIT_DISCONNECT);
+    }
+  };
+
+  // ✅ IMPROVED: Only auto-reconnect if user didn't explicitly disconnect
   useEffect(() => {
-    checkConnection();
+    const initializeConnection = async () => {
+      const wasConnected = localStorage.getItem(STORAGE_KEYS.WALLET_ADDRESS);
+      const explicitDisconnect = checkExplicitDisconnect();
 
-    // Listen for account changes
+      // Only auto-check if user was previously connected AND didn't explicitly disconnect
+      if (wasConnected && !explicitDisconnect && window.ethereum) {
+        await checkConnection();
+      }
+
+      setHasCheckedConnection(true);
+    };
+
+    initializeConnection();
+
+    // Setup event listeners
     if (window.ethereum) {
       window.ethereum.on("accountsChanged", handleAccountsChanged);
       window.ethereum.on("chainChanged", handleChainChanged);
@@ -42,18 +75,33 @@ export const Web3Provider = ({ children }) => {
     };
   }, []);
 
-  // Load user role from localStorage
+  // Load role ONLY after successful connection
   useEffect(() => {
-    const savedRole = localStorage.getItem(STORAGE_KEYS.USER_ROLE);
-    if (savedRole) {
-      setUserRole(savedRole);
+    if (account) {
+      const savedRole = localStorage.getItem(STORAGE_KEYS.USER_ROLE);
+      if (savedRole) {
+        setUserRole(savedRole);
+      }
     }
-  }, []);
+  }, [account]);
 
   const checkConnection = async () => {
     if (!window.ethereum) return;
 
     try {
+      // Check if we have permission first
+      const permissions = await window.ethereum.request({
+        method: "wallet_getPermissions",
+      });
+
+      const hasAccountsPermission = permissions.some(
+        (permission) => permission.parentCapability === "eth_accounts"
+      );
+
+      if (!hasAccountsPermission) {
+        return;
+      }
+
       const accounts = await window.ethereum.request({
         method: "eth_accounts",
       });
@@ -70,59 +118,65 @@ export const Web3Provider = ({ children }) => {
       }
     } catch (err) {
       console.error("Error checking connection:", err);
+      localStorage.removeItem(STORAGE_KEYS.WALLET_ADDRESS);
+      localStorage.removeItem(STORAGE_KEYS.USER_ROLE);
     }
   };
 
-  const handleAccountsChanged = (accounts) => {
-    if (accounts.length === 0) {
-      disconnect();
+  const handleAccountsChanged = useCallback(
+    (accounts) => {
+      if (accounts.length === 0) {
+        // User disconnected from MetaMask
+        disconnect();
+      } else if (accounts[0] !== account) {
+        // Account changed, update state
+        setAccount(accounts[0]);
+        localStorage.setItem(STORAGE_KEYS.WALLET_ADDRESS, accounts[0]);
+
+        // Reset role when account changes
+        setUserRole(null);
+        localStorage.removeItem(STORAGE_KEYS.USER_ROLE);
+      }
+    },
+    [account]
+  );
+
+  const handleChainChanged = useCallback((newChainId) => {
+    const chainIdDecimal = parseInt(newChainId, 16);
+
+    if (chainIdDecimal === BLOCKCHAIN_CONFIG.CHAIN_ID) {
+      setChainId(chainIdDecimal);
+      setError(null);
     } else {
-      setAccount(accounts[0]);
-      localStorage.setItem(STORAGE_KEYS.WALLET_ADDRESS, accounts[0]);
+      setChainId(chainIdDecimal);
+      setError(`Please switch to ${BLOCKCHAIN_CONFIG.NETWORK_NAME}`);
     }
-  };
+  }, []);
 
-  const handleChainChanged = () => {
-    window.location.reload();
-  };
-  const getEthereumProvider = () => {
-    if (!window.ethereum) return null;
-
-    // Jika ada beberapa provider (EIP-6963 conflict handling sederhana)
-    if (window.ethereum.providers) {
-      // Cari provider yang benar-benar MetaMask
-      const metamaskProvider = window.ethereum.providers.find(
-        (provider) => provider.isMetaMask
-      );
-      if (metamaskProvider) return metamaskProvider;
-    }
-
-    // Fallback ke default
-    return window.ethereum;
-  };
-
+  // ✅ IMPROVED: Clear explicit disconnect flag when connecting
   const connectWallet = async (walletType = "metamask") => {
     setIsConnecting(true);
     setError(null);
 
     try {
       if (!window.ethereum) {
-        throw new Error("MetaMask is not installed");
+        throw new Error(
+          "MetaMask is not installed. Please install MetaMask extension."
+        );
       }
 
-      // Check if MetaMask is unlocked
-      const permissions = await window.ethereum.request({
-        method: "wallet_getPermissions",
-      });
+      // ✅ CRITICAL: Clear explicit disconnect flag before connecting
+      // This allows future auto-reconnect
+      setExplicitDisconnect(false);
 
-      // Request account access
+      // Request accounts - this will ALWAYS show MetaMask popup
       const accounts = await window.ethereum.request({
         method: "eth_requestAccounts",
       });
 
       if (!accounts || accounts.length === 0) {
         throw new Error(
-          "No accounts found. Please create an account in MetaMask."
+          "No accounts found. Please unlock your MetaMask wallet."
         );
       }
 
@@ -134,15 +188,18 @@ export const Web3Provider = ({ children }) => {
       if (network.chainId !== BLOCKCHAIN_CONFIG.CHAIN_ID) {
         try {
           await switchNetwork();
+          const updatedNetwork = await provider.getNetwork();
+          setChainId(updatedNetwork.chainId);
         } catch (switchError) {
-          throw new Error("Please switch to Lisk Sepolia network");
+          throw new Error(`Please switch to ${BLOCKCHAIN_CONFIG.NETWORK_NAME}`);
         }
+      } else {
+        setChainId(network.chainId);
       }
 
       setAccount(accounts[0]);
       setProvider(provider);
       setSigner(signer);
-      setChainId(network.chainId);
 
       localStorage.setItem(STORAGE_KEYS.WALLET_ADDRESS, accounts[0]);
 
@@ -150,17 +207,15 @@ export const Web3Provider = ({ children }) => {
     } catch (err) {
       console.error("Error connecting wallet:", err);
 
-      // Better error messages
       let errorMessage = err.message;
       if (err.code === 4001) {
         errorMessage =
-          "Connection request was rejected. Please try again and approve the connection.";
+          "Connection request rejected. Please approve the connection in MetaMask.";
       } else if (err.code === -32002) {
         errorMessage =
-          "Connection request is already pending. Please check your MetaMask extension.";
-      } else if (err.message.includes("wallet must has at least one account")) {
-        errorMessage =
-          "Please unlock your MetaMask wallet and ensure you have at least one account.";
+          "Connection request pending. Please check your MetaMask extension.";
+      } else if (err.code === -32603) {
+        errorMessage = "Internal error. Please try refreshing the page.";
       }
 
       setError(errorMessage);
@@ -179,7 +234,6 @@ export const Web3Provider = ({ children }) => {
         ],
       });
     } catch (switchError) {
-      // Chain not added to wallet
       if (switchError.code === 4902) {
         await addNetwork();
       } else {
@@ -203,24 +257,55 @@ export const Web3Provider = ({ children }) => {
         ],
       });
     } catch (addError) {
-      throw new Error("Failed to add network to wallet");
+      throw new Error(
+        "Failed to add network. Please add manually in MetaMask."
+      );
     }
   };
 
-  const disconnect = () => {
+  // ✅ IMPROVED: Set explicit disconnect flag and attempt to revoke permissions
+  const disconnect = useCallback(async () => {
+    // Clear all state
     setAccount(null);
     setProvider(null);
     setSigner(null);
     setChainId(null);
     setUserRole(null);
+    setError(null);
+
+    // Clear localStorage
     localStorage.removeItem(STORAGE_KEYS.WALLET_ADDRESS);
     localStorage.removeItem(STORAGE_KEYS.USER_ROLE);
-  };
 
-  const selectRole = (role) => {
+    // ✅ CRITICAL: Set explicit disconnect flag
+    // This prevents auto-reconnect on next visit
+    setExplicitDisconnect(true);
+
+    // ✅ BONUS: Try to revoke permissions (works on newer MetaMask versions)
+    try {
+      if (window.ethereum && window.ethereum.request) {
+        // Check if wallet_revokePermissions is available
+        await window.ethereum.request({
+          method: "wallet_revokePermissions",
+          params: [
+            {
+              eth_accounts: {},
+            },
+          ],
+        });
+        console.log("Permissions revoked successfully");
+      }
+    } catch (err) {
+      // This is expected on older MetaMask versions
+      // The explicit disconnect flag will handle the behavior
+      console.log("Permission revocation not supported, using fallback method");
+    }
+  }, []);
+
+  const selectRole = useCallback((role) => {
     setUserRole(role);
     localStorage.setItem(STORAGE_KEYS.USER_ROLE, role);
-  };
+  }, []);
 
   const value = {
     account,
@@ -231,6 +316,7 @@ export const Web3Provider = ({ children }) => {
     error,
     userRole,
     isConnected: !!account,
+    hasCheckedConnection,
     connectWallet,
     disconnect,
     selectRole,

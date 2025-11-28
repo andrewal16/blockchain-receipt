@@ -7,67 +7,120 @@ import {
   Wallet,
   Link2,
   ShieldCheck,
-  Briefcase,
   FileText,
   Store,
   ChevronRight,
   Loader2,
   CheckCircle2,
   LayoutDashboard,
+  AlertCircle,
+  Info,
 } from "lucide-react";
 
 const WalletConnection = () => {
-  const { connectWallet, isConnected, account, selectRole } = useWeb3();
+  const {
+    connectWallet,
+    isConnected,
+    account,
+    selectRole,
+    userRole,
+    error: web3Error,
+    hasCheckedConnection,
+  } = useWeb3();
+
   const [isConnecting, setIsConnecting] = useState(false);
   const [showRoleSelection, setShowRoleSelection] = useState(false);
+  const [localError, setLocalError] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (isConnected && account) {
+    if (isConnected && account && !userRole) {
       setShowRoleSelection(true);
     }
-  }, [isConnected, account]);
+
+    if (isConnected && account && userRole) {
+      redirectToRole(userRole);
+    }
+  }, [isConnected, account, userRole]);
+
+  if (!hasCheckedConnection) {
+    return (
+      <div className="min-h-screen bg-[#0B0F19] flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 text-cyan-400 animate-spin mx-auto mb-4" />
+          <p className="text-slate-400 text-sm">
+            Checking wallet connection...
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const handleConnectMetaMask = async () => {
     setIsConnecting(true);
-    const result = await connectWallet("metamask");
-    setIsConnecting(false);
+    setLocalError(null);
 
-    if (result.success) {
-      setShowRoleSelection(true);
+    try {
+      const result = await connectWallet("metamask");
+
+      if (result.success) {
+        setShowRoleSelection(true);
+      } else {
+        setLocalError(result.error);
+      }
+    } catch (err) {
+      setLocalError("Unexpected error occurred. Please try again.");
+      console.error("Connection error:", err);
+    } finally {
+      setIsConnecting(false);
     }
   };
 
   const handleRoleSelect = (role) => {
     selectRole(role);
+    redirectToRole(role);
+  };
 
-    // Logic routing tetap original
-    if (role === "finance") {
-      navigate("/finance/dashboard");
-    } else if (role === "cfo") {
-      navigate("/dashboard");
-    } else if (role === "vendor") {
-      navigate("/vendor/dashboard");
-    } else {
-      navigate("/");
+  const redirectToRole = (role) => {
+    switch (role) {
+      case "finance":
+        navigate("/finance/dashboard");
+        break;
+      case "cfo":
+        navigate("/dashboard");
+        break;
+      case "vendor":
+        navigate("/vendor/dashboard");
+        break;
+      default:
+        navigate("/");
     }
   };
 
+  const displayError = localError || web3Error;
+
   return (
-    // Container utama menggunakan flex-col dan min-h-screen
     <div className="min-h-screen bg-[#0B0F19] flex flex-col font-sans text-slate-200">
-      {/* Navbar tetap di atas */}
       <Navbar />
 
-      {/* Area konten menggunakan flex-1 untuk mengisi sisa ruang, menjamin centering sempurna */}
       <div className="flex-1 flex items-center justify-center p-4 relative overflow-hidden">
-        {/* Dekorasi Background Halus */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-blue-500/5 rounded-full blur-[100px] pointer-events-none" />
 
         <Card className="max-w-md w-full bg-slate-900/80 border border-slate-800/60 backdrop-blur-xl shadow-2xl shadow-black/50 rounded-2xl relative z-10">
           <div className="p-8">
+            {displayError && (
+              <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-xl flex items-start gap-3 animate-fade-in">
+                <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm text-red-200 font-medium">
+                    Connection Error
+                  </p>
+                  <p className="text-xs text-red-300/80 mt-1">{displayError}</p>
+                </div>
+              </div>
+            )}
+
             {!showRoleSelection ? (
-              /* --- STATE 1: CONNECT WALLET --- */
               <>
                 <div className="text-center mb-8">
                   <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 shadow-inner mb-5 ring-1 ring-white/5">
@@ -80,7 +133,16 @@ const WalletConnection = () => {
                     Connect Wallet
                   </h2>
                   <p className="text-slate-400 text-sm mt-2">
-                    Hubungkan wallet Anda untuk melanjutkan
+                    Connect your wallet to continue
+                  </p>
+                </div>
+
+                {/* ✅ NEW: Info banner about connection behavior */}
+                <div className="mb-6 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg flex items-start gap-3">
+                  <Info className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+                  <p className="text-xs text-blue-200/90 leading-relaxed">
+                    MetaMask will ask for your approval each time you connect.
+                    This ensures your wallet security.
                   </p>
                 </div>
 
@@ -89,27 +151,27 @@ const WalletConnection = () => {
                   <button
                     onClick={handleConnectMetaMask}
                     disabled={isConnecting}
-                    className="group w-full flex items-center gap-4 p-4 bg-slate-800/40 hover:bg-slate-800 border border-slate-700/50 hover:border-orange-500/50 rounded-xl transition-all duration-300"
+                    className="group w-full flex items-center gap-4 p-4 bg-slate-800/40 hover:bg-slate-800 border border-slate-700/50 hover:border-orange-500/50 rounded-xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <div className="w-12 h-12 flex items-center justify-center bg-orange-500/10 rounded-lg shrink-0 group-hover:scale-105 transition-transform duration-300">
-                      {/* Logo Metamask Abstract (Fox Color) */}
-                      <svg
-                        viewBox="0 0 24 24"
-                        className="w-7 h-7 text-orange-500 fill-current"
-                      >
-                        <path d="M21.5 7.5l-3-1.5L16 9l-3-6-3 6-2.5-3-3 1.5 1 6h15z" />
-                      </svg>
+                      {isConnecting ? (
+                        <Loader2 className="w-7 h-7 text-orange-500 animate-spin" />
+                      ) : (
+                        <svg
+                          viewBox="0 0 24 24"
+                          className="w-7 h-7 text-orange-500 fill-current"
+                        >
+                          <path d="M21.5 7.5l-3-1.5L16 9l-3-6-3 6-2.5-3-3 1.5 1 6h15z" />
+                        </svg>
+                      )}
                     </div>
 
                     <div className="flex-1 text-left">
                       <div className="font-semibold text-white flex items-center gap-2">
                         MetaMask
-                        {isConnecting && (
-                          <Loader2 className="w-4 h-4 animate-spin text-orange-400" />
-                        )}
                       </div>
                       <div className="text-xs text-slate-400">
-                        Popular web3 wallet
+                        {isConnecting ? "Connecting..." : "Popular web3 wallet"}
                       </div>
                     </div>
                     <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-orange-400 transition-colors" />
@@ -127,7 +189,7 @@ const WalletConnection = () => {
                       <div className="font-medium text-slate-300">
                         WalletConnect
                       </div>
-                      <div className="text-xs text-slate-500">Segera hadir</div>
+                      <div className="text-xs text-slate-500">Coming soon</div>
                     </div>
                   </button>
 
@@ -143,20 +205,33 @@ const WalletConnection = () => {
                       <div className="font-medium text-slate-300">
                         Coinbase Wallet
                       </div>
-                      <div className="text-xs text-slate-500">Segera hadir</div>
+                      <div className="text-xs text-slate-500">Coming soon</div>
                     </div>
                   </button>
                 </div>
+
+                <div className="mt-6 pt-6 border-t border-slate-800/50">
+                  <p className="text-xs text-slate-500 text-center">
+                    Don't have a wallet?{" "}
+                    <a
+                      href="https://metamask.io/download/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-cyan-400 hover:text-cyan-300 underline"
+                    >
+                      Install MetaMask
+                    </a>
+                  </p>
+                </div>
               </>
             ) : (
-              /* --- STATE 2: SELECT ROLE --- */
               <>
                 <div className="text-center mb-8">
-                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-500/10 mb-4 ring-1 ring-green-500/20 animate-fade-in">
+                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-500/10 mb-4 ring-1 ring-green-500/20 animate-scale-in">
                     <CheckCircle2 className="w-8 h-8 text-green-400" />
                   </div>
                   <h2 className="text-2xl font-bold text-white mb-1">
-                    Wallet Terhubung
+                    Wallet Connected
                   </h2>
                   <div className="flex justify-center mt-2">
                     <span className="px-3 py-1 bg-slate-800 rounded-full text-xs font-mono text-slate-400 border border-slate-700 flex items-center gap-2">
@@ -168,10 +243,10 @@ const WalletConnection = () => {
 
                 <div className="space-y-4">
                   <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 text-center">
-                    Pilih Akses Anda
+                    Select Your Access
                   </h3>
 
-                  {/* Finance Team - Emerald Theme */}
+                  {/* Finance Team */}
                   <button
                     onClick={() => handleRoleSelect("finance")}
                     className="w-full p-4 bg-slate-800/40 border border-slate-700/50 rounded-xl hover:bg-slate-800 hover:border-emerald-500/50 hover:shadow-[0_0_20px_-5px_rgba(16,185,129,0.3)] transition-all duration-300 text-left group"
@@ -192,7 +267,7 @@ const WalletConnection = () => {
                     </div>
                   </button>
 
-                  {/* CFO - Violet Theme */}
+                  {/* CFO */}
                   <button
                     onClick={() => handleRoleSelect("cfo")}
                     className="w-full p-4 bg-slate-800/40 border border-slate-700/50 rounded-xl hover:bg-slate-800 hover:border-violet-500/50 hover:shadow-[0_0_20px_-5px_rgba(139,92,246,0.3)] transition-all duration-300 text-left group"
@@ -213,7 +288,7 @@ const WalletConnection = () => {
                     </div>
                   </button>
 
-                  {/* Vendor - Amber Theme */}
+                  {/* Vendor */}
                   <button
                     onClick={() => handleRoleSelect("vendor")}
                     className="w-full p-4 bg-slate-800/40 border border-slate-700/50 rounded-xl hover:bg-slate-800 hover:border-amber-500/50 hover:shadow-[0_0_20px_-5px_rgba(245,158,11,0.3)] transition-all duration-300 text-left group"
@@ -239,6 +314,38 @@ const WalletConnection = () => {
           </div>
         </Card>
       </div>
+
+      <style jsx>{`
+        @keyframes fade-in {
+          from {
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        @keyframes scale-in {
+          from {
+            transform: scale(0.8);
+            opacity: 0;
+          }
+          to {
+            transform: scale(1);
+            opacity: 1;
+          }
+        }
+
+        .animate-fade-in {
+          animation: fade-in 0.3s ease-out;
+        }
+
+        .animate-scale-in {
+          animation: scale-in 0.4s ease-out;
+        }
+      `}</style>
     </div>
   );
 };

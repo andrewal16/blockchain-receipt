@@ -1,11 +1,11 @@
 // Blockchain Configuration
 export const BLOCKCHAIN_CONFIG = {
+  CHAIN_ID: 4202, // Lisk Sepolia Testnet
   NETWORK_NAME: "Lisk Sepolia Testnet",
-  CHAIN_ID: 4202, // Lisk Sepolia
   RPC_URL: "https://rpc.sepolia-api.lisk.com",
   EXPLORER_URL: "https://sepolia-blockscout.lisk.com",
   CURRENCY: {
-    name: "ETH",
+    name: "Sepolia Ether",
     symbol: "ETH",
     decimals: 18,
   },
@@ -165,12 +165,14 @@ export const TOAST_MESSAGES = {
   COPY_SUCCESS: "Copied to clipboard",
 };
 
+// ✅ UPDATED: Added EXPLICIT_DISCONNECT key
 // Local Storage Keys
 export const STORAGE_KEYS = {
   WALLET_ADDRESS: "wallet_address",
   USER_ROLE: "user_role",
   SUBSCRIPTION_PLAN: "subscription_plan",
   RECENT_RECEIPTS: "recent_receipts",
+  EXPLICIT_DISCONNECT: "explicit_disconnect", // ✅ NEW: Track user-initiated disconnect
 };
 
 // Feature Highlights for Landing Page
