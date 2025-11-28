@@ -85,6 +85,21 @@ export const Web3Provider = ({ children }) => {
   const handleChainChanged = () => {
     window.location.reload();
   };
+  const getEthereumProvider = () => {
+    if (!window.ethereum) return null;
+
+    // Jika ada beberapa provider (EIP-6963 conflict handling sederhana)
+    if (window.ethereum.providers) {
+      // Cari provider yang benar-benar MetaMask
+      const metamaskProvider = window.ethereum.providers.find(
+        (provider) => provider.isMetaMask
+      );
+      if (metamaskProvider) return metamaskProvider;
+    }
+
+    // Fallback ke default
+    return window.ethereum;
+  };
 
   const connectWallet = async (walletType = "metamask") => {
     setIsConnecting(true);
@@ -95,10 +110,21 @@ export const Web3Provider = ({ children }) => {
         throw new Error("MetaMask is not installed");
       }
 
+      // Check if MetaMask is unlocked
+      const permissions = await window.ethereum.request({
+        method: "wallet_getPermissions",
+      });
+
       // Request account access
       const accounts = await window.ethereum.request({
         method: "eth_requestAccounts",
       });
+
+      if (!accounts || accounts.length === 0) {
+        throw new Error(
+          "No accounts found. Please create an account in MetaMask."
+        );
+      }
 
       const provider = new ethers.providers.Web3Provider(window.ethereum);
       const signer = provider.getSigner();
@@ -123,8 +149,22 @@ export const Web3Provider = ({ children }) => {
       return { success: true, account: accounts[0] };
     } catch (err) {
       console.error("Error connecting wallet:", err);
-      setError(err.message);
-      return { success: false, error: err.message };
+
+      // Better error messages
+      let errorMessage = err.message;
+      if (err.code === 4001) {
+        errorMessage =
+          "Connection request was rejected. Please try again and approve the connection.";
+      } else if (err.code === -32002) {
+        errorMessage =
+          "Connection request is already pending. Please check your MetaMask extension.";
+      } else if (err.message.includes("wallet must has at least one account")) {
+        errorMessage =
+          "Please unlock your MetaMask wallet and ensure you have at least one account.";
+      }
+
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
     } finally {
       setIsConnecting(false);
     }
