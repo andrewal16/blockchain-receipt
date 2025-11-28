@@ -11,6 +11,7 @@ import Pricing from "./pages/Pricing";
 
 // Pages - Phase 2 (Finance Team & CFO)
 import AuditorSubmissions from "./pages/AuditorSubmissions";
+import FinanceDashboard from "./pages/FinanceDashboard";
 import CFODashboard from "./pages/CFODashboard";
 import Reports from "./pages/Reports";
 
@@ -40,7 +41,9 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
 
   if (allowedRoles && !allowedRoles.includes(userRole)) {
     // Redirect to appropriate dashboard based on role
-    if (userRole === "auditor") {
+    if (userRole === "finance") {
+      return <Navigate to="/finance/dashboard" replace />;
+    } else if (userRole === "auditor") {
       return <Navigate to="/upload" replace />;
     } else if (userRole === "cfo") {
       return <Navigate to="/dashboard" replace />;
@@ -61,6 +64,14 @@ function App() {
         <Route path="/pricing" element={<Pricing />} />
 
         {/* ===== FINANCE TEAM ROUTES ===== */}
+        <Route
+          path="/finance/dashboard"
+          element={
+            <ProtectedRoute allowedRoles={["finance"]}>
+              <FinanceDashboard />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/upload"
           element={
